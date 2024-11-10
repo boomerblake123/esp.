@@ -1,0 +1,160 @@
+-- Settings for ESP
+local lineThickness = 2                      -- Thickness of the outline lines
+local lineTransparency = 0.85                -- Transparency for the outline lines
+local toggleESP = true                       -- Variable to track if ESP is on or off
+
+-- Table to keep track of ESP lines by player
+local playerCubes = {}
+
+-- Function to create a line
+local function createLine()
+    local line = Drawing.new("Line")
+    line.Visible = false
+    line.Thickness = lineThickness
+    line.Transparency = lineTransparency
+    return line
+end
+
+-- Function to create cube lines for a player
+local function createCube()
+    local lines = {}
+    for i = 1, 12 do  -- A cube has 12 edges
+        table.insert(lines, createLine())
+    end
+    return lines
+end
+
+-- Function to calculate a rainbow color based on time
+local function getRainbowColor()
+    local hue = tick() % 5 / 5  -- Cycles every 5 seconds
+    return Color3.fromHSV(hue, 1, 1)
+end
+
+-- Function to determine the color based on the team
+local function getPlayerColor(player)
+    if player.Team then
+        return player.TeamColor.Color  -- Team color if on a team
+    else
+        return getRainbowColor()       -- Rainbow color if not on a team
+    end
+end
+
+-- Function to update the 3D cube around the player's character
+local function updateCube(character, lines, color)
+    local camera = game.Workspace.CurrentCamera
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    
+    if not rootPart then return end
+
+    -- Define the half size of the cube around the root part (smaller box)
+    local size = Vector3.new(1.5, 3, 1.5)  -- Half size of the cube (smaller box)
+    local corners = {
+        rootPart.CFrame * CFrame.new(-size.X, -size.Y, -size.Z),
+        rootPart.CFrame * CFrame.new(size.X, -size.Y, -size.Z),
+        rootPart.CFrame * CFrame.new(size.X, -size.Y, size.Z),
+        rootPart.CFrame * CFrame.new(-size.X, -size.Y, size.Z),
+        rootPart.CFrame * CFrame.new(-size.X, size.Y, -size.Z),
+        rootPart.CFrame * CFrame.new(size.X, size.Y, -size.Z),
+        rootPart.CFrame * CFrame.new(size.X, size.Y, size.Z),
+        rootPart.CFrame * CFrame.new(-size.X, size.Y, size.Z),
+    }
+
+    -- Edges between corners to form a cube
+    local edges = {
+        {1, 2}, {2, 3}, {3, 4}, {4, 1}, -- Bottom square
+        {5, 6}, {6, 7}, {7, 8}, {8, 5}, -- Top square
+        {1, 5}, {2, 6}, {3, 7}, {4, 8}  -- Vertical connections
+    }
+
+    for i, edge in pairs(edges) do
+        local cornerA = corners[edge[1]].Position
+        local cornerB = corners[edge[2]].Position
+
+        -- Convert 3D world positions to 2D screen positions
+        local screenPosA, onScreenA = camera:WorldToViewportPoint(cornerA)
+        local screenPosB, onScreenB = camera:WorldToViewportPoint(cornerB)
+
+        if onScreenA and onScreenB and toggleESP then
+            lines[i].From = Vector2.new(screenPosA.X, screenPosA.Y)
+            lines[i].To = Vector2.new(screenPosB.X, screenPosB.Y)
+            lines[i].Color = color
+            lines[i].Visible = true
+        else
+            lines[i].Visible = false
+        end
+    end
+end
+
+-- Function to update ESP cubes around players' hitboxes
+local function updateESP()
+    for _, player in pairs(game.Players:GetPlayers()) do
+        if player ~= game.Players.LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local character = player.Character
+            local color = getPlayerColor(player)
+            
+            -- If the player does not already have an ESP cube, create one
+            if not playerCubes[player] then
+                playerCubes[player] = createCube()
+            end
+            local lines = playerCubes[player]
+
+            -- Update the ESP on each frame, but only once per player
+            if not playerCubes[player].renderConnection then
+                playerCubes[player].renderConnection = game:GetService("RunService").RenderStepped:Connect(function()
+                    if toggleESP and character and character:FindFirstChild("HumanoidRootPart") then
+                        color = getPlayerColor(player)  -- Update color based on team or rainbow
+                        updateCube(character, lines, color)
+                    else
+                        -- Hide all lines if ESP is off or player is not in view
+                        for _, line in pairs(lines) do
+                            line.Visible = false
+                        end
+                    end
+                end)
+            end
+        end
+    end
+end
+
+-- Function to clean up ESP cubes for players who left
+local function cleanupCubes()
+    for player, data in pairs(playerCubes) do
+        if not game.Players:FindFirstChild(player.Name) then
+            -- Disconnect the render connection and remove ESP lines
+            if data.renderConnection then
+                data.renderConnection:Disconnect()
+            end
+            for _, line in pairs(data) do
+                if typeof(line) == "Instance" then line:Remove() end
+            end
+            playerCubes[player] = nil
+        end
+    end
+end
+
+-- Function to toggle ESP on and off with "R" key
+local function toggleESPKey()
+    game:GetService("UserInputService").InputBegan:Connect(function(input)
+        if input.KeyCode == Enum.KeyCode.R then
+            toggleESP = not toggleESP  -- Toggle the ESP state
+            -- Hide all ESP lines if ESP is toggled off
+            if not toggleESP then
+                for _, lines in pairs(playerCubes) do
+                    for _, line in pairs(lines) do
+                        line.Visible = false
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- Run the ESP update, cleanup, and toggle functions
+spawn(function()
+    toggleESPKey()   -- Enable the toggle feature for ESP
+    while true do
+        updateESP()   -- Update or add ESP cubes for current players
+        cleanupCubes() -- Remove ESP cubes for players who have left
+        wait(5)       -- Wait 5 seconds before checking again
+    end
+end)
