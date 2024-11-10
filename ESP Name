@@ -1,0 +1,163 @@
+-- Services
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local camera = workspace.CurrentCamera
+
+-- Default settings
+local espEnabled = true  -- Start with ESP enabled
+local espSize = 30       -- Default ESP size
+local espTransparency = 0.2 -- 80% transparency (0 is fully visible, 1 is fully invisible)
+local maxDistance = 1000 -- Max distance at which the ESP will be visible
+
+-- Update frequency optimization
+local updateInterval = 0.1  -- Update every 0.1 seconds
+local lastUpdate = 0
+
+-- Table to store player ESPs for quick access and management
+local playerESPs = {}
+
+-- Function to create ESP for a player
+local function createESP(player)
+    if player == Players.LocalPlayer or not player.Character then return end
+    local head = player.Character:FindFirstChild("Head")
+    if head and not playerESPs[player] then
+        local billboardGui = Instance.new("BillboardGui")
+        billboardGui.Name = "ESP"
+        billboardGui.Adornee = head
+        billboardGui.AlwaysOnTop = true
+        billboardGui.Size = UDim2.new(espSize / 100, 0, espSize / 100, 0)
+        billboardGui.StudsOffset = Vector3.new(0, 2, 0)
+
+        local textLabel = Instance.new("TextLabel")
+        textLabel.Parent = billboardGui
+        textLabel.BackgroundTransparency = 1
+        textLabel.Size = UDim2.new(1, 0, 1, 0)
+        textLabel.TextStrokeTransparency = 0.5
+        textLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        textLabel.Text = player.Name
+        textLabel.TextSize = 11.2  -- Set text size to 11.2
+        textLabel.TextScaled = false
+        textLabel.TextTransparency = espTransparency
+
+        -- Set text color based on the player's team (if they have one)
+        if player.Team then
+            textLabel.TextColor3 = player.TeamColor.Color
+        else
+            -- Sync rainbow effect for all no-team players
+            local hue = 0
+            coroutine.wrap(function()
+                while textLabel.Parent do
+                    textLabel.TextColor3 = Color3.fromHSV(hue, 1, 1)
+                    hue = (hue + 0.005) % 1
+                    wait(0.02)  -- Update color every frame for smooth transition
+                end
+            end)()
+        end
+
+        -- Update text size based on distance from the camera
+        coroutine.wrap(function()
+            while billboardGui.Parent do
+                local distance = (head.Position - camera.CFrame.Position).Magnitude
+                textLabel.TextSize = math.clamp(30 / (distance / 50), 5, 30)  -- Adjust text size based on distance
+                wait(0.1)
+            end
+        end)()
+
+        -- Store the created ESP for later removal
+        playerESPs[player] = billboardGui
+        billboardGui.Parent = head
+    end
+end
+
+-- Function to remove ESP from a player
+local function removeESP(player)
+    if player.Character then
+        local head = player.Character:FindFirstChild("Head")
+        if head then
+            local esp = head:FindFirstChild("ESP")
+            if esp then
+                esp:Destroy()
+            end
+        end
+        playerESPs[player] = nil  -- Remove from tracking table
+    end
+end
+
+-- Function to toggle all ESPs based on espEnabled
+local function toggleESP()
+    for _, player in pairs(Players:GetPlayers()) do
+        if espEnabled then
+            createESP(player)
+        else
+            removeESP(player)
+        end
+    end
+end
+
+-- Toggle ESP visibility with Q
+UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
+    if gameProcessedEvent then return end
+    if input.KeyCode == Enum.KeyCode.Q then
+        espEnabled = not espEnabled
+        toggleESP()
+    end
+end)
+
+-- Function to update ESP for players based on distance and toggling
+local function updateESP()
+    local currentTime = tick()
+
+    -- Only update if enough time has passed based on the update interval
+    if currentTime - lastUpdate > updateInterval then
+        lastUpdate = currentTime
+        for _, player in pairs(Players:GetPlayers()) do
+            if player.Character and player.Character:FindFirstChild("Head") then
+                local distance = (player.Character.Head.Position - camera.CFrame.Position).Magnitude
+                if distance > maxDistance or not espEnabled then
+                    removeESP(player)
+                elseif espEnabled then
+                    -- Create ESP only if it doesn't exist yet
+                    if not playerESPs[player] then
+                        createESP(player)
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- Initialize ESP for players already in the game
+for _, player in pairs(Players:GetPlayers()) do
+    if player ~= Players.LocalPlayer and player.Character then
+        createESP(player)
+        player.CharacterAdded:Connect(function()
+            if espEnabled then
+                createESP(player)
+            end
+        end)
+    end
+end
+
+-- Detect when a player's team changes to update ESP color
+Players.PlayerAdded:Connect(function(player)
+    player.CharacterAdded:Connect(function()
+        if espEnabled then
+            createESP(player)
+        end
+    end)
+    player:GetPropertyChangedSignal("Team"):Connect(function()
+        if espEnabled then
+            removeESP(player)
+            createESP(player)
+        end
+    end)
+end)
+
+-- Remove ESP when players leave
+Players.PlayerRemoving:Connect(removeESP)
+
+-- Update ESP at a fixed interval to reduce overhead
+RunService.Heartbeat:Connect(function()
+    updateESP()
+end)
