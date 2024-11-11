@@ -5,10 +5,10 @@ local RunService = game:GetService("RunService")
 local camera = workspace.CurrentCamera
 
 -- Default settings
-local espEnabled = true  -- Start with ESP enabled
-local espSize = 30       -- Default ESP size
+local espEnabled = false  -- Start with ESP disabled by default
+local espSize = 30        -- Default ESP size
 local espTransparency = 0.2 -- 80% transparency (0 is fully visible, 1 is fully invisible)
-local maxDistance = 1000 -- Max distance at which the ESP will be visible
+local maxDistance = 1000  -- Max distance at which the ESP will be visible
 
 -- Update frequency optimization
 local updateInterval = 0.1  -- Update every 0.1 seconds
@@ -19,7 +19,7 @@ local playerESPs = {}
 
 -- Function to create ESP for a player
 local function createESP(player)
-    if player == Players.LocalPlayer or not player.Character then return end
+    if player == Players.LocalPlayer or not player.Character or not espEnabled then return end
     local head = player.Character:FindFirstChild("Head")
     if head and not playerESPs[player] then
         local billboardGui = Instance.new("BillboardGui")
@@ -47,7 +47,7 @@ local function createESP(player)
             -- Sync rainbow effect for all no-team players
             local hue = 0
             coroutine.wrap(function()
-                while textLabel.Parent do
+                while textLabel.Parent and espEnabled do
                     textLabel.TextColor3 = Color3.fromHSV(hue, 1, 1)
                     hue = (hue + 0.005) % 1
                     wait(0.02)  -- Update color every frame for smooth transition
@@ -127,9 +127,9 @@ local function updateESP()
     end
 end
 
--- Initialize ESP for players already in the game
+-- Initialize ESP for players already in the game, only if espEnabled is true
 for _, player in pairs(Players:GetPlayers()) do
-    if player ~= Players.LocalPlayer and player.Character then
+    if espEnabled and player ~= Players.LocalPlayer and player.Character then
         createESP(player)
         player.CharacterAdded:Connect(function()
             if espEnabled then
@@ -161,3 +161,4 @@ Players.PlayerRemoving:Connect(removeESP)
 RunService.Heartbeat:Connect(function()
     updateESP()
 end)
+
