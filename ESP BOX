@@ -1,5 +1,6 @@
--- Initialize ESP as off by default
+-- Configuration
 local toggleESP = false  
+local MAX_DISTANCE = 1000  -- Set maximum distance for ESP in studs
 
 -- Table to keep track of ESP lines for each player
 local playerCubes = {}
@@ -29,6 +30,23 @@ local function updateCube(player)
     local character = player.Character
     local rootPart = character and character:FindFirstChild("HumanoidRootPart")
     if not rootPart then return end
+
+    -- Calculate distance from local player
+    local localPlayer = game.Players.LocalPlayer
+    local localCharacter = localPlayer.Character
+    local localRootPart = localCharacter and localCharacter:FindFirstChild("HumanoidRootPart")
+    if not localRootPart then return end
+
+    local distance = (localRootPart.Position - rootPart.Position).Magnitude
+    if distance > MAX_DISTANCE then
+        -- Hide ESP if player is beyond the maximum distance
+        if playerCubes[player] then
+            for _, line in pairs(playerCubes[player]) do
+                line.Visible = false
+            end
+        end
+        return
+    end
 
     local camera = game.Workspace.CurrentCamera
     local size = Vector3.new(1.5, 3, 1.5)
@@ -70,76 +88,3 @@ local function updateCube(player)
     end
 end
 
--- Function to clean up ESP for a player who leaves or when toggling off
-local function cleanupPlayer(player)
-    local cubeLines = playerCubes[player]
-    if cubeLines then
-        for _, line in pairs(cubeLines) do
-            line.Visible = false
-            line:Remove()
-        end
-        playerCubes[player] = nil
-    end
-end
-
--- Function to refresh ESP for all players
-local function refreshESP()
-    -- Remove ESP cubes for any players who are no longer in the game
-    for player, _ in pairs(playerCubes) do
-        if not game.Players:FindFirstChild(player.Name) then
-            cleanupPlayer(player)
-        end
-    end
-    
-    -- Update or create ESP cubes for each player in the game
-    for _, player in pairs(game.Players:GetPlayers()) do
-        if player ~= game.Players.LocalPlayer then
-            if not playerCubes[player] and toggleESP then
-                playerCubes[player] = createCube()
-            end
-            updateCube(player)
-        end
-    end
-end
-
--- Event listener for when a new player joins
-game.Players.PlayerAdded:Connect(function(player)
-    player.CharacterAdded:Connect(function()
-        if player ~= game.Players.LocalPlayer then
-            if not playerCubes[player] and toggleESP then
-                playerCubes[player] = createCube()
-            end
-        end
-    end)
-end)
-
--- Event listener for when a player leaves
-game.Players.PlayerRemoving:Connect(function(player)
-    cleanupPlayer(player)
-end)
-
--- Toggle ESP on and off with the "Q" key
-game:GetService("UserInputService").InputBegan:Connect(function(input)
-    if input.KeyCode == Enum.KeyCode.Q then
-        toggleESP = not toggleESP
-        -- Hide all ESP lines if turning off
-        if not toggleESP then
-            for player, _ in pairs(playerCubes) do
-                cleanupPlayer(player)
-            end
-        end
-    end
-end)
-
--- Helper function for rainbow color (cycles every 5 seconds)
-local function getRainbowColor()
-    local hue = tick() % 5 / 5
-    return Color3.fromHSV(hue, 1, 1)
-end
-
--- Set up a recurring task to refresh ESP every 5 seconds
-game:GetService("RunService").RenderStepped:Connect(function()
-    if toggleESP then
-        refreshESP()
-    end
-end)
