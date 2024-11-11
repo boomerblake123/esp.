@@ -1,7 +1,7 @@
 -- Settings for ESP
 local lineThickness = 2                      -- Thickness of the outline lines
 local lineTransparency = 0.85                -- Transparency for the outline lines
-local toggleESP = true                       -- Variable to track if ESP is on or off
+local toggleESP = true                       -- Start with ESP on by default
 
 -- Table to keep track of ESP lines by player
 local playerCubes = {}
@@ -87,18 +87,20 @@ end
 
 -- Function to update ESP cubes around players' hitboxes
 local function updateESP()
+    -- Ensure that we're creating new cubes for any new players
     for _, player in pairs(game.Players:GetPlayers()) do
         if player ~= game.Players.LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             local character = player.Character
             local color = getPlayerColor(player)
             
-            -- If the player does not already have an ESP cube, create one
+            -- Only create new cubes if the player doesn't have them yet
             if not playerCubes[player] then
                 playerCubes[player] = createCube()
             end
+            
             local lines = playerCubes[player]
 
-            -- Update the ESP on each frame, but only once per player
+            -- Update the ESP on each frame
             if not playerCubes[player].renderConnection then
                 playerCubes[player].renderConnection = game:GetService("RunService").RenderStepped:Connect(function()
                     if toggleESP and character and character:FindFirstChild("HumanoidRootPart") then
@@ -118,24 +120,32 @@ end
 
 -- Function to clean up ESP cubes for players who left
 local function cleanupCubes()
+    local playersInGame = {}
+    
+    -- Collect all current players in the game
+    for _, player in pairs(game.Players:GetPlayers()) do
+        playersInGame[player.Name] = true
+    end
+
+    -- Remove ESP for players who have left the game
     for player, data in pairs(playerCubes) do
-        if not game.Players:FindFirstChild(player.Name) then
+        if not playersInGame[player.Name] then
             -- Disconnect the render connection and remove ESP lines
             if data.renderConnection then
-                data.renderConnection:Disconnect()
+                data.renderConnection:Disconnect()  -- Disconnect render connection
             end
             for _, line in pairs(data) do
-                if typeof(line) == "Instance" then line:Remove() end
+                line:Remove()  -- Remove all drawing lines
             end
-            playerCubes[player] = nil
+            playerCubes[player] = nil  -- Remove the player from the tracking table
         end
     end
 end
 
--- Function to toggle ESP on and off with "R" key
+-- Function to toggle ESP on and off with "Q" key
 local function toggleESPKey()
     game:GetService("UserInputService").InputBegan:Connect(function(input)
-        if input.KeyCode == Enum.KeyCode.R then
+        if input.KeyCode == Enum.KeyCode.Q then  -- Q key to toggle ESP
             toggleESP = not toggleESP  -- Toggle the ESP state
             -- Hide all ESP lines if ESP is toggled off
             if not toggleESP then
@@ -153,8 +163,8 @@ end
 spawn(function()
     toggleESPKey()   -- Enable the toggle feature for ESP
     while true do
-        updateESP()   -- Update or add ESP cubes for current players
+        updateESP()   -- Reset and add new ESP cubes for current players
         cleanupCubes() -- Remove ESP cubes for players who have left
-        wait(5)       -- Wait 5 seconds before checking again
+        wait(5)       -- Reset ESP every 5 seconds
     end
 end)
