@@ -24,7 +24,7 @@ end
 
 -- Function to create and update the cube for each player
 local function updateCube(player)
-    if not toggleESP then return end -- Do nothing if ESP is turned off
+    if not toggleESP or player == game.Players.LocalPlayer then return end -- Skip if it's the local player
     
     local character = player.Character
     local rootPart = character and character:FindFirstChild("HumanoidRootPart")
@@ -93,18 +93,22 @@ local function refreshESP()
     
     -- Update or create ESP cubes for each player in the game
     for _, player in pairs(game.Players:GetPlayers()) do
-        if not playerCubes[player] and toggleESP then
-            playerCubes[player] = createCube()
+        if player ~= game.Players.LocalPlayer then
+            if not playerCubes[player] and toggleESP then
+                playerCubes[player] = createCube()
+            end
+            updateCube(player)
         end
-        updateCube(player)
     end
 end
 
 -- Event listener for when a new player joins
 game.Players.PlayerAdded:Connect(function(player)
     player.CharacterAdded:Connect(function()
-        if not playerCubes[player] and toggleESP then
-            playerCubes[player] = createCube()
+        if player ~= game.Players.LocalPlayer then
+            if not playerCubes[player] and toggleESP then
+                playerCubes[player] = createCube()
+            end
         end
     end)
 end)
@@ -139,4 +143,5 @@ game:GetService("RunService").RenderStepped:Connect(function()
         refreshESP()
     end
 end)
+
 
